@@ -39,7 +39,7 @@ Now another question appeared.
 Who executes this `.class` file?
 
 The answer is the JVM.
-JVM => java virtual machine 
+JVM => Java virtual machine 
 
 When I run:
 
