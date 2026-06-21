@@ -1,179 +1,297 @@
-# 01 - Where Does Docker Actually Fit?
+# 01 - The Problem Docker Is Trying To Solve
 
-After understanding Operating Systems, Virtual Machines, and Containers, I wanted to answer one practical question:
+In the previous chapter, I understood:
 
-> Where does Docker actually fit in a real deployment?
+```text
+Physical Server
+      ↓
+Virtual Machine (EC2)
+      ↓
+Ubuntu OS
+```
 
-Most Docker tutorials start with:
+At this point, I had my own Linux server running in AWS.
+
+I could connect using SSH:
 
 ```bash
-docker run nginx
+ssh -i key.pem ubuntu@<public-ip>
 ```
 
-The problem is that nobody wakes up and starts with Docker.
+and run commands on the server.
 
-Before Docker, there must be a machine.
+Everything looked good.
 
-So instead of learning Docker commands immediately, I decided to create the entire path myself.
+But I still didn't understand why Docker existed.
 
 ---
 
-## Starting With Nothing
+## The Real Problem
 
-Initially, I only had:
+Imagine I write a simple Python application.
 
-```text
-My Laptop
+```python
+print("Hello Susi")
 ```
 
-No server.
-
-No Docker.
-
-No application running in the cloud.
-
-If I build a Spring Boot application on my laptop:
+On my laptop:
 
 ```bash
-java -jar app.jar
+python app.py
 ```
 
-it works.
+Output:
 
-But my laptop is not production.
+```text
+Hello Susi
+```
 
-Applications need a server where they can run continuously.
-
-So the first task was not Docker.
-
-The first task was getting a server.
+Works perfectly.
 
 ---
 
-## Creating a Server in AWS
+## Moving To Another Server
 
-AWS allows us to create Virtual Machines using EC2.
-
-When I launched my first Ubuntu EC2 instance, I was essentially asking AWS:
-
-> "Give me a Linux machine."
-
-After a few seconds AWS provided:
+Now I copy the same application to another server.
 
 ```text
-Ubuntu Server
-Public IP Address
+Laptop
+   |
+ app.py
+   |
+   v
+Server
 ```
 
-Now the architecture became:
-
-```text
-My Laptop
-      |
-      |
-      v
-AWS Ubuntu Server
-```
-
-At this point I finally had a machine where applications could run.
-
-But there was still one problem.
-
-I had a server.
-
-I couldn't control it.
-
----
-
-## Connecting to the Server
-
-AWS gave me a key pair during instance creation.
-
-Using that key, I connected through SSH.
+Then I run:
 
 ```bash
-ssh -i docker-lab-key.pem ubuntu@<public-ip>
+python app.py
 ```
 
-This was probably the most important moment in the entire setup.
-
-Before SSH:
+Suddenly:
 
 ```text
-Commands execute on:
-
-My Laptop
+python: command not found
 ```
 
-After SSH:
-
-```text
-Commands execute on:
-
-AWS Server
-```
-
-Now every command I typed was running inside a machine located somewhere in an AWS data center.
-
-For the first time, I was working on a cloud server instead of my local system.
+The application fails.
 
 ---
 
-## Finally Installing Docker
+## Why Did It Fail?
 
-Only now did Docker enter the story.
+Because my laptop and the server are different environments.
 
-I installed Docker on the Ubuntu server.
+Example:
 
-```bash
-sudo apt update
-sudo apt install docker.io -y
-```
-
-After installation the architecture changed again.
+### My Laptop
 
 ```text
-My Laptop
-      |
-     SSH
-      |
-      v
-Ubuntu Server
-      |
-Docker Engine
+Ubuntu
+Python 3.12
+Required Libraries
 ```
 
-This immediately answered a confusion I had when starting Docker.
+### Server
 
-Docker is not the server.
+```text
+Ubuntu
+Python Missing
+```
 
-Docker is software running on the server.
+Same code.
 
-Just like Git can be installed on Linux.
+Different environment.
 
-Just like Java can be installed on Linux.
-
-Docker can also be installed on Linux.
+Different result.
 
 ---
 
-## Testing Docker
+## The Classic Developer Problem
 
-The first command I executed was:
+This situation is so common that it has a famous name.
+
+```text
+"It works on my machine."
+```
+
+The code works.
+
+The environment is the problem.
+
+---
+
+## First Solution: Install Everything Manually
+
+One solution is:
+
+```text
+Server A
+  Install Python
+
+Server B
+  Install Python
+
+Server C
+  Install Python
+```
+
+This works.
+
+But after a few months:
+
+```text
+Server A -> Python 3.10
+
+Server B -> Python 3.12
+
+Server C -> Python Missing
+```
+
+Again problems.
+
+Managing environments becomes difficult.
+
+---
+
+## Docker's Idea
+
+Instead of saying:
+
+> Install Python first, then run my application
+
+Docker says:
+
+> Package everything together.
+
+```text
+Python
+   +
+Application
+   +
+Dependencies
+   =
+One Package
+```
+
+Docker calls this package:
+
+```text
+Image
+```
+
+---
+
+# What Is An Image?
+
+Think of an image as a snapshot.
+
+Example:
+
+```text
+Ubuntu
+Python 3.12
+app.py
+```
+
+packed together.
+
+```text
++------------------+
+| Ubuntu           |
+| Python 3.12      |
+| app.py           |
++------------------+
+```
+
+This complete package is called an image.
+
+---
+
+## Why Is This Useful?
+
+Now I don't care whether the server has Python installed.
+
+Because Python already exists inside the image.
+
+I only need Docker.
+
+```text
+Server
+    |
+ Docker
+    |
+ Image
+```
+
+Same image.
+
+Same behavior.
+
+Everywhere.
+
+---
+
+# Where Are Images Stored?
+
+Now another question appears.
+
+> If images are so important, where do they come from?
+
+Think about source code.
+
+```text
+Code
+   |
+GitHub
+```
+
+GitHub stores code.
+
+Similarly:
+
+```text
+Images
+   |
+Docker Hub
+```
+
+Docker Hub stores images.
+
+---
+
+## Docker Hub
+
+Docker Hub contains ready-made images such as:
+
+```text
+ubuntu
+python
+nginx
+redis
+postgres
+```
+
+These images are maintained and shared by the community and companies.
+
+---
+
+## My First Docker Command
+
+I ran:
 
 ```bash
 docker run hello-world
 ```
 
-The command worked.
+At first it looked like a simple command.
 
-A message appeared.
+But Docker actually performed multiple steps.
 
-Container exited successfully.
+---
 
-Simple.
-
-But something interesting happened behind the scenes.
+## What Happened Behind The Scenes?
 
 Docker checked:
 
@@ -181,33 +299,63 @@ Docker checked:
 Do I already have the hello-world image?
 ```
 
-Since I didn't have it, Docker downloaded it from Docker Hub.
-
-Then Docker:
+If yes:
 
 ```text
-Image
-    ↓
-Container
-    ↓
-Execution
+Create Container
+      ↓
+Run Container
 ```
 
-and displayed the output.
+If no:
 
-This was my first container.
+```text
+Docker Hub
+      ↓
+Download Image
+      ↓
+Create Container
+      ↓
+Run Container
+```
+
+This is why the command worked even though I never downloaded anything manually.
 
 ---
 
-## Understanding Images
+# Image vs Container
 
-While experimenting, I discovered that images and containers are not the same thing.
+This confused me a lot initially.
 
-An image is a template.
+I thought:
 
-A container is a running instance created from that template.
+```text
+Image = Container
+```
 
-For example:
+But they are different.
+
+---
+
+## Image
+
+An image is just a template.
+
+Nothing is running.
+
+Example:
+
+```text
+Ubuntu Image
+```
+
+---
+
+## Container
+
+A container is a running instance created from an image. (like class & objects in oops)
+
+Example:
 
 ```text
 Ubuntu Image
@@ -221,148 +369,71 @@ Ubuntu Image
 
 One image can create many containers.
 
-This idea becomes important later when running applications at scale.
-
 ---
 
-## Running Ubuntu Inside Docker
 
-To understand containers better, I started an Ubuntu container.
+# My Mental Model
 
-```bash
-docker run -it ubuntu bash
-```
-
-Now the architecture looked like this:
+After experimenting, this became my understanding:
 
 ```text
-My Laptop
+Docker Hub
       |
-     SSH
+     Image
       |
       v
-AWS Ubuntu Server
-      |
-Docker Engine
-      |
-Ubuntu Container
-```
-
-This was interesting because I was now entering another isolated environment inside the server.
-
-The server itself was already a Virtual Machine.
-
-Inside that Virtual Machine, Docker was creating containers.
-
-For the first time, the VM and Container concepts became clear.
-
----
-
-## Running My Own Application
-
-Running Ubuntu and hello-world containers was useful, but I wanted to run something I created.
-
-I wrote a simple Python program:
-
-```python
-print("Hello Susi")
-```
-
-Then I created a Dockerfile.
-
-```dockerfile
-FROM python:3.12
-
-COPY app.py .
-
-CMD ["python","app.py"]
-```
-
-The most important line was:
-
-```dockerfile
-FROM python:3.12
-```
-
-Instead of installing Python manually, I started from a ready-made image that already contained Python.
-
-Docker then combined:
-
-```text
-Python Image
-      +
-My Code
-      +
-Startup Command
-```
-
-and produced a new image.
-
-```bash
-docker build -t susi-app .
-```
-
----
-
-## The Full Picture
-
-After building and running my own image, the architecture finally made sense.
-
-```text
-My Laptop
-      |
-     SSH
+  Container
       |
       v
-AWS EC2 Virtual Machine
-      |
-Docker Engine
-      |
-Docker Container
-      |
-Application
+ Application Running
 ```
-
-Docker was never the starting point.
-
-The actual journey was:
-
-```text
-AWS Account
-      ↓
-IAM User
-      ↓
-EC2 Virtual Machine
-      ↓
-SSH Access
-      ↓
-Docker Installation
-      ↓
-Docker Image
-      ↓
-Docker Container
-      ↓
-Application
-```
-
-Once this flow became clear, Docker stopped feeling like a separate technology.
-
-It became just another layer between the server and the application.
 
 ---
 
-## What's Next?
+# What I Learned
 
-So far, the application only prints a message and exits.
+```text
+Docker
+    =
+    Tool that manages containers
 
-Real applications are different.
+Docker Hub
+    =
+    Stores images
 
-They need:
+Image
+    =
+    Reusable package
 
-* Ports
-* Databases
-* Persistent Storage
-* Multiple Containers
-* Communication between services
+Container
+    =
+    Running instance of an image
+```
 
-The next step is understanding how Docker runs real applications and how multiple containers work together.
+Most importantly:
+
+```text
+Docker was not created to run applications.
+
+Docker was created to make environments consistent.
+```
+
+That is the actual problem Docker solves.
+
+---
+
+# Next
+
+Now I understand:
+
+- Why Docker exists
+- What problem it solves
+- What Docker Hub is
+- What an image is
+- What a container is
+
+The next question becomes:
+
+> If Docker Hub already has images like Python and Ubuntu, how can I create my own image?
+
+That's where Dockerfiles enter the picture.

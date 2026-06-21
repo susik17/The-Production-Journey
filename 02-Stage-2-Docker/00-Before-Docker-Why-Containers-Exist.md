@@ -1,333 +1,376 @@
-# 00 - Before Docker: Why Containers Exist
+# 00 - Understanding the Layers Before Docker
 
-## The Question I Wanted to Answer
+When I started learning Docker, I could run commands like:
 
-Before learning Docker, I had a simple question:
+```bash
+docker run hello-world
+```
 
-> If my application runs on my laptop, why do we need Docker at all?
+and everything worked.
 
-To answer that, I had to understand what happens before Docker even enters the picture.
+But I still had one confusion.
+
+> What exactly is Docker running on?
+
+To answer that, I started from the bottom and built everything myself in AWS.
 
 ---
 
-## Everything Starts With an Operating System
+## It All Starts With a Physical Machine
 
-Applications cannot run directly on hardware.
+Somewhere inside an AWS datacenter, there is a real server.(datacenters owned by many companies like Azure,GCP,etc. Here, I use AWS server)
+![alt text](image.png)
 
-They need an Operating System.
-
-For example:
-
-```text
-Laptop
-    +
-Ubuntu
-    =
-Usable Computer
-```
-
-The operating system manages:
-
-* CPU
-* Memory
-* Storage
-* Processes
-* Networking
-
-Without an OS, there is no place for an application to run.
-
----
-
-## The Old Approach
-
-Imagine a company has three applications:
+Something like:
 
 ```text
-Student Service
-Payment Service
-Notification Service
+Physical Server
+
+CPU  : 64 Cores
+RAM  : 256 GB
+Disk : 4 TB
 ```
 
-All of them are installed on the same server.
+This is an actual machine owned by AWS.
 
 ```text
-Server
- ├── Student Service
- ├── Payment Service
- └── Notification Service
++----------------------+
+| Physical Server      |
+|                      |
+| CPU                  |
+| RAM                  |
+| Disk                 |
++----------------------+
 ```
 
-At first, everything looks fine.
+One customer cannot use the entire machine.
 
-Then problems start.
+AWS has thousands of customers.
 
-* One application consumes all memory
-* One application crashes
-* Different applications need different software versions
-
-Now every application affects the others.
+So AWS needs a way to divide this machine safely.
 
 ---
 
 ## Virtual Machines
 
-To solve this, virtualization was introduced.
-
-Instead of one server running everything together, we can create multiple virtual servers.(logical seperation)
+Instead of giving the whole server to one customer, AWS splits it into multiple virtual machines.
+![alt text](image-1.png)
 
 ```text
 Physical Server
-       |
-   Hypervisor
-       |
-  ----------------
-  |      |      |
- VM1    VM2    VM3
+        |
+    Hypervisor => make logical seperations & maintains  eg:VMware    |
+--------------------------------
+|              |              |
+VM-1          VM-2          VM-3
 ```
-
-Each VM behaves like a separate computer.
 
 Example:
 
 ```text
-VM1 → Backend API
-VM2 → Database
-VM3 → Monitoring
+VM-1 -> My EC2
+VM-2 -> Another Company
+VM-3 -> Another Customer
 ```
 
-This gives isolation and better control.
+Each VM behaves like a completely separate computer.
+
+Even though all of them are running on the same physical server.
+
+This is the idea behind virtualization.
 
 ---
 
-## Where Does AWS EC2 Fit?
+## What Happens When I Create an EC2?
 
-AWS => EC2 => Virtualization Concept  =>  
-physical server -> logical seperations -> EC2 instances
-
-When I launch an EC2 instance:
-
-```text
-EC2 Instance
-```
-
-I am actually creating a Virtual Machine.
-
-Example:
+When I launched:
 
 ```text
 Ubuntu EC2
 ```
 
-becomes:
+I was not getting a new physical server.
+
+AWS simply created a Virtual Machine for me.
+
+Something like:
 
 ```text
-AWS Datacenter (more servers)
+Physical Server
         |
-      VM
+    Hypervisor
         |
-     Ubuntu
+--------------------------------
+|              |              |
+My EC2       Customer B     Customer C
 ```
 
-So before Docker, I first created:
+Suppose the physical server has:
 
 ```text
-Root User (AWS account)
-      ↓
-IAM User (for security)
-      ↓
-EC2 Instance (server)
-      ↓
-SSH Connection(for connect with my own laptop)
+256 GB RAM
 ```
 
-and got access to my own Linux server.
+AWS may allocate:
+
+```text
+My EC2 = 8 GB RAM
+```
+
+Now that 8 GB belongs to my virtual machine.
+
+Inside that VM, Ubuntu runs normally.
+
+```text
+My EC2
+│
+├── Ubuntu OS
+├── SSH
+├── System Services
+└── Applications
+```
+
+At this point I basically own a Linux server.
 
 ---
 
-## The Limitation of Virtual Machines
+## Accessing the Server
 
-VMs solve many problems.
-
-But every VM contains its own operating system.
+After creating the EC2 instance, AWS gave me:
 
 ```text
-VM1
- └── Ubuntu
-
-VM2
- └── Ubuntu
-
-VM3
- └── Ubuntu
+Public IP
+Key Pair (.pem)
 ```
 
-This means:
+Using SSH:
 
-* More RAM usage
-* More storage usage
-* Slower startup
+```bash
+ssh -i key.pem ubuntu@public-ip
+```
 
-Sometimes we don't need an entire operating system just to run one application. we just need part of OS only.
-Eg:VM1 => 10GB => Application needs only 5GB => remaing waste 
+I connected from my laptop.
+
+Architecture:
+
+```text
+My Laptop
+      |
+     SSH
+      |
+      v
+Ubuntu EC2
+```
+
+Now every command runs on the EC2 server instead of my local machine.
 
 ---
 
-## Enter Containers
+## Why Not Just Use Virtual Machines For Everything?
 
-Containers take a different approach.
+Initially this sounds perfect.
 
-Instead of creating a full OS every time, containers share the host operating system.
+Every application can get its own VM.
+
+Example:
 
 ```text
-Server
-    |
- Host OS
-    |
- Containers
+VM-1 -> Spring Boot
+VM-2 -> PostgreSQL
+VM-3 -> Redis
+```
+
+But then I realized something.
+
+Every VM contains a full operating system.
+
+```text
+VM-1
+ └── Ubuntu
+
+VM-2
+ └── Ubuntu
+
+VM-3
+ └── Ubuntu
+```
+
+Three applications.
+
+Three operating systems.
+
+Suppose:
+
+```text
+Ubuntu OS = 1 GB RAM
+```
+
+Then:
+
+```text
+VM-1 Ubuntu = 1 GB
+VM-2 Ubuntu = 1 GB
+VM-3 Ubuntu = 1 GB
+
+Total OS Cost = 3 GB
+```
+
+before the applications even start.
+
+That feels expensive.
+
+---
+
+## The Observation That Led To Containers
+
+Imagine I have a simple Python application.
+
+```python
+print("Hello Susi")
+```
+
+Do I really need:
+
+```text
+Ubuntu
+Boot Process
+System Services
+Drivers
+Package Manager
+```
+
+every single time just to run one small application?
+
+Not really.
+
+Most of the operating system is not even being used by the application.
+
+This is where containers come in.
+
+---
+
+## Containers
+
+
+Instead of creating a full operating system for every application, containers share the operating system.
+![alt text](image-2.png)
+
+```text
+Ubuntu OS
+      |
+--------------------------------
+|              |              |
+Container 1   Container 2   Container 3
 ```
 
 Example:
 
 ```text
-Container 1 → Backend API
-Container 2 → PostgreSQL
-Container 3 → Redis
+Container 1 -> Spring Boot
+Container 2 -> PostgreSQL
+Container 3 -> Redis
 ```
 
-Each application is isolated, but there is no extra operating system inside every container.
+Now there is:
 
-Because of this, containers are:
+```text
+One Ubuntu OS
+```
 
-* Lightweight
-* Faster to start
-* Easier to move between environments
+instead of:
+
+```text
+Three Ubuntu OS
+```
+
+This saves memory and storage.
+
+Containers also start much faster.
 
 ---
 
-## Why Docker Became Popular
+## The Most Important Difference
 
-Suppose I build a Spring Boot application.
-
-On my laptop:
+A VM contains its own operating system.
 
 ```text
-Java 21
-Maven
-Dependencies
+VM
+│
+├── Ubuntu
+└── Application
 ```
 
-Everything works.
-
-I move the application to another server.
-
-Suddenly:
+A container does not.
 
 ```text
-Java missing
-Wrong version
-Missing libraries
+Container
+│
+└── Application
 ```
 
-The application fails.
+The container uses the operating system that already exists on the host machine.
 
-Classic developer problem:
-
-```text
-"It works on my machine."
-```
+That is why containers are lightweight.
 
 ---
 
-## Docker's Idea
-#### Docker => implements containarization
+## My Mental Model
 
-Docker packages everything an application needs.
+This is the model that finally made sense to me.
 
 ```text
-Application
-    +
-Runtime
-    +
-Dependencies(application & system)
-    +
-Configuration
+Physical Server
+        |
+    Virtual Machine (EC2)
+        |
+      Ubuntu
+        |
+    Containers
+        |
+    Applications
 ```
 
-into a single image.
-
-That image can then run anywhere Docker is installed.
+Every layer exists because it solves a problem.
 
 ```text
-Laptop
+Physical Server
       |
-Docker Image
+      | Need sharing
+      v
+Virtual Machines
       |
-EC2 Server
+      | Too heavy
+      v
+Containers
 ```
-
-Same image.
-
-Same behavior.
 
 ---
 
-## The Architecture I Built
+## Where I Am Right Now
 
-During this learning journey, the actual flow looked like this:
+After completing the AWS setup, this is my current architecture.
 
 ```text
 My Laptop
       |
-      | SSH
+     SSH
       |
       v
 AWS EC2 (Virtual Machine)
       |
-Docker Engine
-      |
-Docker Container
-      |
-Application
+Ubuntu OS
 ```
 
-This is where Docker fits.
+I now understand:
 
-Docker is not the server.
+* What a Physical Server is
+* What a Virtual Machine is
+* Why EC2 is a VM
+* Why VMs became popular
+* Why containers were introduced
 
-Docker is not the cloud.
+The next question is:
 
-Docker is a layer that sits on top of a server and provides a consistent environment for applications.
+> How do containers actually get created and managed?
 
----
-
-## Key Takeaways
-
-```text
-OS => Runs the machine
-
-VM => Virtual computer 
-
-EC2 => AWS virtual machine
-
-Container => Lightweight isolated environment
-
-Docker => Tool that creates and manages containers
-
-Image => Blueprint
-
-Container => Running instance
-```
-
----
-
-## Next
-
-Now that the foundation is clear, the next question becomes:
-
-> "How did I actually create a server, connect to it, install Docker, and run my first container?"
-
-That journey continues in:
-
-```text
-01-where-does-docker-actually-fit.md
-```
+That's where Docker enters the picture.
