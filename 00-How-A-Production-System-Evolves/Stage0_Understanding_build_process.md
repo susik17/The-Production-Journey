@@ -1,5 +1,7 @@
 # Phase 0 – Understanding the Build Process
 
+
+
 ## Why?
 
 Before learning Docker, I wanted to understand **what Docker actually packages**.
